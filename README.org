@@ -33,6 +33,10 @@ With agent-shell, you can chat with the likes of Gemini CLI, Claude Code, Mistra
 - [[https://github.com/nineluj/agent-review][agent-review]]: Code review interface for =agent-shell=.
 - [[https://github.com/ultronozm/agent-shell-attention.el][agent-shell-attention.el]]: Mode-line attention tracker for =agent-shell=.
 
+* Icons
+
+Thanks to [[https://github.com/lobehub/lobe-icons][Lobe Icons]] for the lovely icons.
+
 * Setup
 
 ** External dependencies
