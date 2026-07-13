@@ -481,6 +481,27 @@ such as closing a laptop lid."
   :type 'boolean
   :group 'agent-shell)
 
+(defcustom agent-shell-header-busy-indicator-style 'animation
+  "Style of the busy indicator displayed in the header.
+
+`animation' displays an animation using `agent-shell-busy-indicator-frames'.
+
+`text' displays a static \"busy\" label instead.  Unlike `animation',
+this does not re-render the header on every animation frame while a
+request is in flight, which reduces memory and GC pressure.
+
+Only takes effect when `agent-shell-show-busy-indicator' is non-nil.
+The mode line busy indicator is always animated."
+  :type '(choice (const :tag "Animation" animation)
+                 (const :tag "Static \"busy\" text" text))
+  :group 'agent-shell)
+
+(defface agent-shell-header-busy-indicator
+  '((t :inherit compilation-mode-line-run))
+  "Face for the static \"busy\" label in the header.
+See `agent-shell-header-busy-indicator-style'."
+  :group 'agent-shell)
+
 (defcustom agent-shell-screenshot-command
   (if (eq system-type 'darwin)
       '("/usr/sbin/screencapture" "-i")
@@ -3674,24 +3695,26 @@ variable (see makunbound)"))
                                       :heartbeat (agent-shell-heartbeat-make
                                                   :on-heartbeat
                                                   (lambda (_heartbeat status)
-                                                    ;; 'ended is the final tick; render
-                                                    ;; even if off-screen ensures hidden.
-                                                    (when (or (eq status 'ended)
-                                                              (get-buffer-window shell-buffer t))
-                                                      (with-current-buffer shell-buffer
-                                                        (agent-shell--update-header-and-mode-line)))
-                                                    ;; 'ended is the final tick; render even
-                                                    ;; if off-screen to ensure animation is hidden.
-                                                    (when-let* ((using-viewports agent-shell-prefer-viewport-interaction)
-                                                                (viewport-buffer (agent-shell-viewport--buffer
-                                                                                  :shell-buffer shell-buffer
-                                                                                  :existing-only t))
-                                                                ;; 'ended is the final tick; render even
-                                                                ;; if off-screen to ensure animation is hidden.
-                                                                ((or (eq status 'ended)
-                                                                     (get-buffer-window viewport-buffer t))))
-                                                      (with-current-buffer viewport-buffer
-                                                        (agent-shell-viewport--update-header)))))
+                                                    ;; With a static busy indicator, headers don't
+                                                    ;; change between ticks; no need to re-render.
+                                                    (unless (and (eq agent-shell-header-busy-indicator-style 'text)
+                                                                 (eq status 'busy))
+                                                      ;; 'ended is the final tick; render even
+                                                      ;; if off-screen to ensure animation is hidden.
+                                                      (when (or (eq status 'ended)
+                                                                (get-buffer-window shell-buffer t))
+                                                        (with-current-buffer shell-buffer
+                                                          (agent-shell--update-header-and-mode-line)))
+                                                      (when-let* ((using-viewports agent-shell-prefer-viewport-interaction)
+                                                                  (viewport-buffer (agent-shell-viewport--buffer
+                                                                                    :shell-buffer shell-buffer
+                                                                                    :existing-only t))
+                                                                  ;; 'ended is the final tick; render even
+                                                                  ;; if off-screen to ensure animation is hidden.
+                                                                  ((or (eq status 'ended)
+                                                                       (get-buffer-window viewport-buffer t))))
+                                                        (with-current-buffer viewport-buffer
+                                                          (agent-shell-viewport--update-header))))))
                                       :client-maker (map-elt config :client-maker)
                                       :needs-authentication (map-elt config :needs-authentication)
                                       :authenticate-request-maker (map-elt config :authenticate-request-maker)
@@ -4311,7 +4334,7 @@ The model contains all inputs needed to render the graphical header."
                      (frame-char-height)))
     (:background-mode . ,(frame-parameter nil 'background-mode))
     (:context-indicator . ,(agent-shell--context-usage-indicator))
-    (:busy-indicator-frame . ,(agent-shell--busy-indicator-frame))
+    (:busy-indicator-frame . ,(agent-shell--header-busy-indicator-frame))
     (:position . ,position)
     (:status . ,status)
     (:bindings . ,bindings)))
@@ -4598,9 +4621,11 @@ When provided, included in help-echo tooltips."
                                       (when (map-elt header-model :busy-indicator-frame)
                                         (dom-append-child text-node
                                                           (dom-node 'tspan
-                                                                    `((fill . ,(agent-shell--svg-fill-color 'default))
+                                                                    `((fill . ,(agent-shell--svg-fill-color
+                                                                                (or (get-text-property 0 'face (map-elt header-model :busy-indicator-frame))
+                                                                                    'default)))
                                                                       (dx . "8"))
-                                                                    (map-elt header-model :busy-indicator-frame))))
+                                                                    (substring-no-properties (map-elt header-model :busy-indicator-frame)))))
                                       text-node))
                    ;; Bindings row (last row if bindings present)
                    (when bindings
@@ -8342,6 +8367,16 @@ Prefers config option data when available."
   (when-let* ((option (agent-shell--config-option-by-category state "thought_level"))
               (current (map-elt option :current-value)))
     (agent-shell--config-option-value-name option current)))
+
+(defun agent-shell--header-busy-indicator-frame ()
+  "Return busy indicator string for the header or nil if not busy.
+See `agent-shell-header-busy-indicator-style'."
+  (pcase agent-shell-header-busy-indicator-style
+    ('text (when (and agent-shell-show-busy-indicator
+                      (memq (map-nested-elt (agent-shell--state) '(:heartbeat :status))
+                            '(started busy)))
+             (propertize " busy" 'face 'agent-shell-header-busy-indicator)))
+    (_ (agent-shell--busy-indicator-frame))))
 
 (defun agent-shell--busy-indicator-frame ()
   "Return busy frame string or nil if not busy."
