@@ -1615,7 +1615,9 @@ handles viewport mode detection, existing shell reuse, and project context."
     (unless shell-buffer
       (user-error "No agent shell buffers available for current project"))
     (if-let* ((window (get-buffer-window shell-buffer)))
-        (quit-restore-window window 'bury)
+        ;; Don't bury the shell: that would move it behind the project's
+        ;; other shells, so toggling again would show one of those instead.
+        (quit-restore-window window)
       (agent-shell--display-buffer shell-buffer))))
 
 ;;;###autoload

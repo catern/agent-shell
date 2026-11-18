@@ -10529,6 +10529,38 @@ Only a shell `agent-shell--start' has finished setting up skips
       (kill-buffer in-project)
       (kill-buffer other-project))))
 
+(ert-deftest agent-shell-toggle-shows-same-shell-again-test ()
+  "Test that toggling a shell off and on again shows that same shell.
+
+Another shell in the same project must not take its place."
+  (let* ((agent-shell-prefer-viewport-interaction nil)
+         (agent-shell-cwd-function (lambda () "/path/to/project/"))
+         (first-shell (agent-shell-tests--make-started-shell
+                       "first-shell" "/path/to/project/"))
+         (second-shell (agent-shell-tests--make-started-shell
+                        "second-shell" "/path/to/project/"))
+         (other-buffer (generate-new-buffer "other-buffer")))
+    (unwind-protect
+        (progn
+          (dolist (shell (list first-shell second-shell))
+            (with-current-buffer shell
+              (setq major-mode 'agent-shell-mode)
+              (setq-local shell-maker--config '((:name . "fake")))))
+          (switch-to-buffer other-buffer)
+          (switch-to-buffer second-shell)
+          ;; Hide the shell from within it...
+          (with-current-buffer second-shell
+            (agent-shell-toggle))
+          (should (eq (window-buffer) other-buffer))
+          ;; ...and bring it back from elsewhere in the project.
+          (with-current-buffer other-buffer
+            (agent-shell-toggle))
+          (should (get-buffer-window second-shell))
+          (should-not (get-buffer-window first-shell)))
+      (kill-buffer first-shell)
+      (kill-buffer second-shell)
+      (kill-buffer other-buffer))))
+
 (ert-deftest agent-shell--shell-buffer-returns-project-shell-test ()
   "Test that finding an open project shell resolves the CWD only once.
 
